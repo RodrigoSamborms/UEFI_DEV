@@ -1,0 +1,79 @@
+$xargList = @(
+    'efi.c',
+    'msr.s',  # Incluimos el archivo que contiene la rutina ReadMsr
+    '-o', 'Esqueleto00.EFI',
+    '-nostdlib',
+    '-ffreestanding',
+    '-fshort-wchar',
+    '-mno-red-zone',
+    '-Wall',
+    '-Wextra',
+    '-Wpedantic',
+    '-std=c11',
+    '-Wl,--subsystem,10',
+    '-Wl,-e,efi_main',
+    '-Wl,--image-base,0'
+)
+& gcc @xargList
+
+ qemu-system-x86_64 -bios C:\Users\sambo\Documents\Programacion\GitHub\UEFI_DEV\OVMF.fd -net none -hda C:\Users\sambo\Documents\UEFI_Dev\Practica_01\UEFI_VFat32.vhd
+1.
+ qemu-system-x86_64 -bios /ruta/a/tu/OVMF.fd -drive format=raw,file=fat:rw:disk -monitor stdio
+
+
+ Nota: Si omites esta bandera y usas la ventana gráfica de QEMU, puedes presionar Ctrl + Alt + 2 para abrir el monitor y Ctrl + Alt + 1 para volver a la pantalla de video).
+ 2. Sintaxis del Comando de Inyección (MCE)
+Una vez en el prompt del monitor de QEMU ((qemu)), utilizarás el comando mce. La sintaxis estricta es:
+
+mce <cpu> <bank> <status> <mcg_status> <addr> <misc>
+(qemu) mce 0 1 0x2000000000000000 0x5 0x0 0x0
+
+cpu: El número del procesador lógico (usualmente 0 si tienes un solo núcleo).
+
+bank: El banco MCA específico (por ejemplo, 1).
+
+status: El valor que tomará el registro IA32_MCi_STATUS (debe ser un error válido para que la CPU lo procese).
+
+mcg_status: El valor que tomará nuestro MSR objetivo: IA32_MCG_STATUS (0x17A).
+
+addr / misc: Direcciones de memoria o información miscelánea asociada al error (pueden ser 0).
+
+3. Procedimiento de Prueba
+Dado que tu programa UEFI actual tiene una pausa de 5 segundos (Stall), tendrás que ser rápido, o mejor aún, pausar la máquina virtual para inyectar el error antes de que el programa lea los registros.
+
+Inicia QEMU en la terminal.
+
+Inmediatamente en el prompt (qemu), escribe stop y presiona Enter. Esto congela la ejecución de la CPU virtual.
+
+Inyecta el error simulando un fallo de hardware no corregido (marcando el bit MCIP en MCG_STATUS). Ejecuta:
+
+Plaintext
+
+(qemu) mce 0 1 0x2000000000000000 0x5 0x0 0x0
+
+Aquí le estamos pasando 0x5 al mcg_status, lo que significa que el estado global reportará un error en progreso.
+
+Escribe c (continue) y presiona Enter para reanudar la ejecución.
+
+Cuando tu binario Esqueleto00.EFI llame a tu función en ensamblador ReadMsr(0x17A), verás reflejado el valor hexadecimal que inyectaste, demostrando que tu interfaz C-Ensamblador está comunicándose exitosamente con los registros de la arquitectura a nivel de hardware emulado.
+
+######
+
+
+Cómo Inyectar el Error desde la Interfaz Gráfica
+Cambiar a la vista del monitor: Una vez que inicies tu script y aparezca la ventana gráfica de QEMU, presiona Ctrl + Alt + 2. La pantalla de UEFI desaparecerá temporalmente y verás una consola de texto pura con el prompt (qemu).
+
+Pausar la CPU virtual: Escribe stop y presiona Enter. Esto congela la ejecución para darte tiempo de inyectar el error antes de que pasen los 5 segundos de tu programa.
+
+Inyectar el registro MCE: Ejecuta el comando con los valores que preparamos:
+mce 0 1 0x2000000000000000 0x5 0x0 0x0
+
+mce 0 1 0xA000000000000000 0x5 0x0 0x0
+
+Reanudar la ejecución: Escribe c (de continue) y presiona Enter.
+
+Volver a la vista normal: Presiona Ctrl + Alt + 1 para regresar a la pantalla principal.
+
+Al volver a la pantalla gráfica, deberías ver la ejecución de tu binario leyendo y mostrando en pantalla el valor 0x5 para el registro IA32_MCG_STATUS.
+
+Nota: Dependiendo de la versión específica de QEMU compilada para Windows, si los atajos de teclado no responden, puedes usar la barra de menú superior de la ventana. Ve a la pestaña View y selecciona compat_monitor0 para abrir el monitor, y luego vuelve a seleccionar VGA (o la opción de display correspondiente) para regresar a la pantalla gráfica.
