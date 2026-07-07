@@ -13,7 +13,7 @@ typedef unsigned long long UINTN;
 typedef uint64_t EFI_STATUS;
 typedef void* EFI_HANDLE;
 //Estructuras incompletas (opacas) para cumplir con el registro de la tabla
-typedef struct _EFI_SIMPL_TEXT_INPUT_PROTOCOL EFI_SIMPLE_TEXT_INPUT_PROTOCOL;
+typedef struct _EFI_SIMPLE_TEXT_INPUT_PROTOCOL EFI_SIMPLE_TEXT_INPUT_PROTOCOL;
 typedef struct _EFI_SIMPLE_TEXT_OUPTUT_PROTOCOL EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL;
 typedef struct _EFI_RUNTIME_SERVICES EFI_RUNTIME_SERVICES;
 typedef struct _EFI_BOOT_SERVICES EFI_BOOT_SERVICES;
@@ -24,7 +24,7 @@ typedef struct {
     uint32_t HeaderSize;    //Tamaño de la tabla en bytes para validación
     uint32_t CRC32;         //protocolo usado para verificar la intergridad de la tabla
     uint32_t Reserved;      //Reservado para usos futuros en la especificación
-} EFI_TABLE_HEADER;         //Tamaño de 196 bytes
+} EFI_TABLE_HEADER;         //Tamaño de 24 bytes es decir 192 bits
 //Estructura limpia de la EFI_SYSTEM_TABLE (sin servicios detallados)
 typedef struct {
     EFI_TABLE_HEADER Hdr; //Varible encabezado del tipo EFI_TABLE_HEADER
@@ -41,6 +41,6 @@ typedef struct {
     UINTN NumberOfTableEntries; //Contador de las entradas a la tabla de configuración dle sistema
     void* ConfigurationTable; //Apuntador a la tabla de configuración del sistema.
     //Esas son las partes requeridas (obligatorias)por la especificación de UEFI.
-} EFI_SYSTEM_TABLE; //Tabla de 216 bytes
+} EFI_SYSTEM_TABLE; //Tabla de 116 bytes
 
 #endif // UEFI_H
