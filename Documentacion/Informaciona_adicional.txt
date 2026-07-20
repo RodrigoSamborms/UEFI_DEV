@@ -1,0 +1,24 @@
+En la carpeta de este sistema existen archivos pdf que pudes leer para mayor informacion
+C:\Users\sambo\Documents\PDF_Portaforio
+En la carpeta C:\Users\sambo\Documents\Programacion\GitHub\UEFI_DEV\Documentacion
+se encuentra el archivo sobre la configuracion y uso del ambiente de este proyecto
+Adicional en las siguientes paginas web hay mas informacion:
+https://www.intel.la/content/www/xl/es/content-details/782158/intel-64-and-ia-32-architectures-software-developer-s-manual-combined-volumes-1-2a-2b-2c-2d-3a-3b-3c-3d-and-4.html
+https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html
+especificacion uefi
+https://uefi.org/specifications
+pagina del proyecto edk2
+https://www.tianocore.org/
+pagina de Coreboot Bios
+https://www.coreboot.org/
+Pagina del emulador Qemu
+https://www.qemu.org/
+pagina del simulador Intel Simics
+https://www.intel.com/content/www/us/en/developer/articles/tool/simics-simulator.html
+
+Referencias locales del repositorio:
+
+- Consulte `Documentacion/Aplicaciones_UEFI_Windows.pdf` para ejemplos y aplicaciones en Windows.
+- Consulte el archivo de instrucciones del repositorio en `.git/GitHub_instructions.md` para referencias centralizadas sobre la creación de Skills.
+
+Nota: las referencias mencionadas en `.git/GitHub_instructions.md` están reflejadas aquí también para facilitar su consulta desde la carpeta `Documentacion`.
