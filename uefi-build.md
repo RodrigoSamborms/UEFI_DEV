@@ -1,30 +1,31 @@
-# UEFI Build Guide
+# Compilar y ejecutar aplicaciones UEFI en QEMU
 
-This workspace includes `build-uefi.ps1`, a PowerShell script that compiles `efi.c` into an EFI application and can optionally dismount the VHD and launch QEMU.
+Esta guía describe cómo compilar una aplicación UEFI x86-64 con GCC y ejecutarla en QEMU con firmware OVMF. Los comandos principales son para PowerShell en Windows; al final se incluye una alternativa para Linux.
 
-## What the script does
+## Requisitos
 
-- Compiles `efi.c` into `Hello.EFI`.
-- Uses MinGW64 / GCC with UEFI-friendly flags.
-- Optionally dismounts `UEFI_VFat32.vhd` if it is attached in Windows.
-- Optionally starts QEMU with OVMF after compilation.
+- GCC para x86-64 con soporte para generar ejecutables PE/COFF (por ejemplo, MinGW-w64), disponible como `gcc` en `PATH`.
+- QEMU x86-64, disponible como `qemu-system-x86_64` en `PATH`.
+- Firmware OVMF, por ejemplo el archivo `OVMF.fd` incluido en la raíz de este repositorio.
+- Una imagen de disco FAT32 accesible desde QEMU, por ejemplo `UEFI_VFat32.vhd`.
+- PowerShell en Windows. En Linux, usa un firmware OVMF y una imagen FAT adecuados para esa plataforma.
 
-## Requirements
-
-- MinGW64 GCC in `PATH`.
-- `OVMF.fd` in the workspace folder.
-- `UEFI_VFat32.vhd` in the workspace folder.
-- QEMU installed as `qemu-system-x86_64` in `PATH`.
-- Windows `Storage` module available for `Get-DiskImage` and `Dismount-DiskImage`.
-
-## Build command used by the script
-
-The script effectively runs a direct compile and link step like this:
+Comprueba que las herramientas estén disponibles:
 
 ```powershell
-& gcc @(
+gcc --version
+qemu-system-x86_64 --version
+```
+
+## Compilar una aplicación
+
+Abre PowerShell en la carpeta del proyecto. Para compilar `efi.c` junto con la rutina en ensamblador `msr.s` y producir `Esqueleto00.EFI`:
+
+```powershell
+$xargList = @(
     'efi.c',
-    '-o', 'Hello.EFI',
+    'msr.s',
+    '-o', 'Esqueleto00.EFI',
     '-nostdlib',
     '-ffreestanding',
     '-fshort-wchar',
@@ -32,149 +33,144 @@ The script effectively runs a direct compile and link step like this:
     '-Wall',
     '-Wextra',
     '-Wpedantic',
-    '-std=c17',
+    '-std=c11',
     '-Wl,--subsystem,10',
     '-Wl,-e,efi_main',
     '-Wl,--image-base,0'
 )
+& gcc @xargList
+if ($LASTEXITCODE -ne 0) { throw "La compilación falló (código $LASTEXITCODE)." }
 ```
 
-## Script parameters
+Ejecuta el comando desde la carpeta que contiene ambos archivos. Si los fuentes están en otra carpeta, cambia las rutas; por ejemplo, para `RASPRact_005`:
 
-- `-Source`: source file to compile. Default: `efi.c`
-- `-Output`: EFI output file. Default: `Hello.EFI`
-- `-Compiler`: compiler command. Default: `gcc`
-- `-VhdPath`: virtual disk path. Default: `.\UEFI_VFat32.vhd`
-- `-QemuPath`: QEMU executable. Default: `qemu-system-x86_64`
-- `-DismountVhd`: dismount the VHD before finishing.
-- `-RunQemu`: dismount the VHD if attached, then start QEMU.
+```powershell
+$xargList[0] = '.\RASPRact_005\efi.c'
+$xargList[1] = '.\RASPRact_005\msr.s'
+$xargList[3] = '.\RASPRact_005\Esqueleto00.EFI'
+& gcc @xargList
+if ($LASTEXITCODE -ne 0) { throw "La compilación falló (código $LASTEXITCODE)." }
+```
 
-## Usage examples
+El fuente C puede incluir otros archivos del proyecto, como `efi.h`; GCC los encontrará si están en la misma carpeta que `efi.c`.
 
-Compile only:
+También existe un script para compilar la aplicación raíz `efi.c` como `Hello.EFI`:
 
 ```powershell
 .\build-uefi.ps1
 ```
 
-Compile and dismount the VHD if it is attached:
+El script usa `-std=c17`; usa el comando directo anterior si necesitas reproducir exactamente las opciones `-std=c11` o compilar otra aplicación.
 
-```powershell
-.\build-uefi.ps1 -DismountVhd
+## Preparar el disco virtual
+
+La aplicación debe estar en una ubicación desde la cual OVMF pueda iniciarla. Para arranque automático, coloca el archivo compilado en la imagen FAT32 con esta ruta estándar:
+
+```text
+\EFI\BOOT\BOOTX64.EFI
 ```
 
-Compile, dismount the VHD, and run QEMU:
+Puedes usar el nombre `BOOTX64.EFI` al copiarlo a esa ruta. Si la imagen no tiene un cargador de arranque configurado, abre el UEFI Shell en QEMU, localiza el sistema de archivos (por ejemplo `FS0:`) y ejecuta la aplicación manualmente:
 
-```powershell
-.\build-uefi.ps1 -RunQemu
+```text
+FS0:
+\EFI\BOOT\BOOTX64.EFI
 ```
 
-Use a different source or output name:
+La imagen debe estar desmontada en Windows antes de abrirla en QEMU si Windows la tiene adjunta. El script `build-uefi.ps1` admite `-DismountVhd` para desmontar la imagen predeterminada `.\UEFI_VFat32.vhd`.
+
+## Ejecutar en QEMU
+
+Desde PowerShell, ajusta las rutas a OVMF y al disco virtual:
 
 ```powershell
-.\build-uefi.ps1 -Source .\efi.c -Output .\MyApp.EFI
+$ovmf = (Resolve-Path '.\OVMF.fd').Path
+$disk = (Resolve-Path '.\UEFI_VFat32.vhd').Path
+qemu-system-x86_64 -machine q35 -m 256M -bios $ovmf -net none -drive "format=raw,file=$disk"
 ```
 
-## QEMU boot command
-
-If you want to start QEMU manually, use:
+Con las rutas absolutas indicadas, ejecuta en PowerShell:
 
 ```powershell
-qemu-system-x86_64 -bios .\OVMF.fd -net none -hda .\UEFI_VFat32.vhd
+qemu-system-x86_64 -machine q35 -m 256M -bios "C:\Users\sambo\Documents\UEFI_Dev\OVMF.fd" -net none -drive "format=raw,file=C:\Users\sambo\Documents\UEFI_Dev\Practica_01\UEFI_VFat32.vhd"
 ```
 
-## Notes
-
-- The script checks whether the VHD is attached and only dismounts it if needed.
-- The EFI entry point used by this codebase is `efi_main`.
-- The generated file can be copied into the FAT32 image and booted in QEMU with OVMF.
-# UEFI Build Guide
-
-This workspace includes `build-uefi.ps1`, a PowerShell script that compiles `efi.c` into an EFI application and can optionally dismount the VHD and launch QEMU.
-
-## What the script does
-
-- Compiles `efi.c` into `Hello.EFI`.
-- Uses MinGW64 / GCC with UEFI-friendly flags.
-- Optionally dismounts `UEFI_VFat32.vhd` if it is attached in Windows.
-- Optionally starts QEMU with OVMF after compilation.
-
-## Requirements
-
-- MinGW64 GCC in `PATH`.
-- `OVMF.fd` in the workspace folder.
-- `UEFI_VFat32.vhd` in the workspace folder.
-- QEMU installed as `qemu-system-x86_64` in `PATH`.
-- Windows `Storage` module available for `Get-DiskImage` and `Dismount-DiskImage`.
-
-## Build command used by the script
-
-The script effectively runs a direct compile and link step like this:
+Para usar el monitor de QEMU en la misma terminal y dejar la máquina pausada antes de iniciar la ejecución:
 
 ```powershell
-& gcc @(
-    'efi.c',
-    '-o', 'Hello.EFI',
-    '-nostdlib',
-    '-ffreestanding',
-    '-fshort-wchar',
-    '-mno-red-zone',
-    '-Wall',
-    '-Wextra',
-    '-Wpedantic',
-    '-std=c17',
-    '-Wl,--subsystem,10',
-    '-Wl,-e,efi_main',
-    '-Wl,--image-base,0'
-)
+$ovmf = (Resolve-Path '.\OVMF.fd').Path
+$disk = (Resolve-Path '.\UEFI_VFat32.vhd').Path
+qemu-system-x86_64 -machine q35 -m 256M -bios $ovmf -net none -drive "format=raw,file=$disk" -monitor stdio -S
 ```
 
-## Script parameters
+`-S` pausa las CPU al arrancar. En el prompt `(qemu)`, escribe `c` y presiona Enter para reanudar. Si prefieres usar la ventana gráfica, omite `-monitor stdio -S`; `-monitor stdio` usa la terminal como monitor y permite introducir comandos ahí.
 
-- `-Source`: source file to compile. Default: `efi.c`
-- `-Output`: EFI output file. Default: `Hello.EFI`
-- `-Compiler`: compiler command. Default: `gcc`
-- `-VhdPath`: virtual disk path. Default: `.UEFI_VFat32.vhd`
-- `-QemuPath`: QEMU executable. Default: `qemu-system-x86_64`
-- `-DismountVhd`: dismount the VHD before finishing.
-- `-RunQemu`: dismount the VHD if attached, then start QEMU.
+Puedes añadir `-nographic` para ejecutar sin la ventana gráfica. En ese modo la salida de video no está disponible; úsalo si tu firmware y aplicación muestran la consola por serie.
 
-## Usage examples
+### Ejecutar en Linux
 
-Compile only:
+Usa las rutas de firmware y disco disponibles en tu sistema:
 
-```powershell
-.\build-uefi.ps1
+```sh
+qemu-system-x86_64 \
+  -machine q35 \
+  -m 256M \
+  -bios /ruta/a/OVMF.fd \
+  -net none \
+  -drive format=raw,file=/ruta/a/UEFI_VFat32.vhd
 ```
 
-Compile and dismount the VHD if it is attached:
+Para controlar el monitor desde la terminal y comenzar pausado, añade `-monitor stdio -S`.
 
-```powershell
-.\build-uefi.ps1 -DismountVhd
+Si tu distribución instala OVMF como imágenes separadas de código y variables, localízalas primero:
+
+```sh
+find /usr/share -type f \( -name 'OVMF_CODE*.fd' -o -name 'OVMF_VARS*.fd' \) 2>/dev/null
 ```
 
-Compile, dismount the VHD, and run QEMU:
+Usa una copia escribible de la imagen de variables para conservar la configuración UEFI entre ejecuciones. Ajusta las rutas según el resultado de la búsqueda:
 
-```powershell
-.\build-uefi.ps1 -RunQemu
+```sh
+cp /usr/share/OVMF/OVMF_VARS.fd "$HOME/OVMF_VARS.fd"
+qemu-system-x86_64 \
+  -machine q35 \
+  -m 256M \
+  -net none \
+  -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE.fd \
+  -drive if=pflash,format=raw,file="$HOME/OVMF_VARS.fd" \
+  -drive format=raw,file=/ruta/a/UEFI_VFat32.vhd
 ```
 
-Use a different source or output name:
+## Inyectar un estado MCE desde el monitor
 
-```powershell
-.\build-uefi.ps1 -Source .\efi.c -Output .\MyApp.EFI
+Este procedimiento sirve para probar una aplicación que lea el registro `IA32_MCG_STATUS` (`0x17A`) mediante `ReadMsr(0x17A)`. La aplicación debe mostrar ese registro después de reanudar la máquina; una aplicación que lea otros MSR no mostrará necesariamente el valor inyectado aquí.
+
+1. Inicia QEMU con `-monitor stdio -S` como se indica arriba. El prompt `(qemu)` aparecerá en la terminal y la CPU permanecerá pausada.
+2. Introduce el comando MCE:
+
+   ```text
+   (qemu) mce 0 1 0x2000000000000000 0x5 0x0 0x0
+   ```
+
+   La sintaxis es `mce <cpu> <bank> <status> <mcg_status> <addr> <misc>`. En el ejemplo se selecciona la CPU 0 y el banco 1; `0x5` es el valor solicitado para `mcg_status`, y `addr` y `misc` son cero.
+3. Reanuda QEMU:
+
+   ```text
+   (qemu) c
+   ```
+
+4. Observa la salida de la aplicación en la ventana de QEMU. El resultado depende de que la aplicación lea e imprima `IA32_MCG_STATUS` y de que la versión de QEMU admita el comando `mce`.
+
+También puedes probar este valor alternativo para `status`:
+
+```text
+(qemu) mce 0 1 0xA000000000000000 0x5 0x0 0x0
 ```
 
-## QEMU boot command
+Si QEMU muestra que `mce` no es un comando reconocido, consulta `(qemu) help` y la documentación de la versión instalada: la disponibilidad del comando puede variar entre compilaciones. Si iniciaste con la ventana gráfica y un monitor compatible, `Ctrl+Alt+2` cambia al monitor y `Ctrl+Alt+1` vuelve a la pantalla de video.
 
-If you want to start QEMU manually, use:
 
-```powershell
-qemu-system-x86_64 -bios .\OVMF.fd -net none -hda .\UEFI_VFat32.vhd
+
+```text
+qemu-system-x86_64 -machine q35 -m 256M -bios "C:\Users\sambo\Documents\UEFI_Dev\OVMF.fd" -net none -drive "format=raw,file=C:\Users\sambo\Documents\UEFI_Dev\Practica_01\UEFI_VFat32.vhd"
 ```
-
-## Notes
-
-- The script checks whether the VHD is attached and only dismounts it if needed.
-- The EFI entry point used by this codebase is `efi_main`.
-- The generated file can be copied into the FAT32 image and booted in QEMU with OVMF.

@@ -1,0 +1,26 @@
+Resumen de la sesión UEFI
+Archivos trabajados
+efi.c: Se agregó un bucle extendido para recorrer todos los bancos MCA según IA32_MCG_CAP. Incluye condición de paro con mensaje y pausa de 5 segundos.
+
+efi.h: Se definieron estructuras mínimas necesarias para BootServices y ConOut, incluyendo la función Stall.
+
+msr.s: Rutina ReadMsr ajustada para empaquetar correctamente EDX:EAX en RAX.
+
+Scripts
+PowerShell (BuildRun-RASPract_002.ps1): Automatiza compilación con GCC y ejecución en QEMU.
+
+Makefile: Compila en Linux/WSL con make. Incluye objetivos all, clean y run para lanzar QEMU automáticamente.
+
+Flujo de trabajo
+Editar fuentes en carpeta RASPract_002.
+
+Compilar con PowerShell (BuildRun-RASPract_002.ps1) o con make en WSL.
+
+Ejecutar en QEMU con OVMF.fd y disco virtual FAT32.
+
+Próximos pasos sugeridos
+Extender el Makefile con variantes de depuración (make debug).
+
+Iterar sobre bancos MCA para pruebas de inyección de errores.
+
+Este archivo sirve como contexto rápido para continuar la práctica UEFI en futuras sesiones.

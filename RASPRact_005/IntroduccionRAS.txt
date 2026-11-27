@@ -1,0 +1,147 @@
+# Introducción a RAS y la Machine-Check Architecture (MCA)
+
+## 1. Conceptos básicos de RAS
+- **Reliability (Confiabilidad):** capacidad de un sistema para operar sin fallos durante un periodo de tiempo.
+- **Availability (Disponibilidad):** porcentaje de tiempo en que el sistema está operativo y accesible.
+- **Serviceability (Mantenibilidad):** facilidad con la que se pueden detectar, diagnosticar y reparar fallos.
+
+Intel incorpora mecanismos de RAS en sus procesadores, siendo la **Machine-Check Architecture (MCA)** uno de los más importantes.
+
+---
+
+## 2. Machine-Check Architecture (Capítulo 15 del Intel SDM Vol. 3B)
+
+### Objetivo
+Detectar y reportar errores internos del procesador y del sistema (memoria, caché, bus).
+
+### Registros principales
+- **Globales (MCG):**
+  - `IA32_MCG_CAP (MSR 0x179)` → capacidades y número de bancos.
+  - `IA32_MCG_STATUS (MSR 0x17A)` → estado global.
+  - `IA32_MCG_CTL (MSR 0x17B)` → control global.
+
+- **Por banco (MCi):**
+  - `IA32_MC[i]_CTL` → habilitación de captura.
+  - `IA32_MC[i]_STATUS` → detalle del error.
+  - `IA32_MC[i]_ADDR` → dirección asociada.
+  - `IA32_MC[i]_MISC` → información adicional.
+
+### Flujo de uso
+1. Verificar soporte con `CPUID`.
+2. Leer `IA32_MCG_CAP` para conocer número de bancos.
+3. Iterar sobre cada banco leyendo `MCi_STATUS`.
+4. Interpretar bits de estado:
+   - `VAL` → registro válido.
+   - `UC` → error irrecuperable.
+   - `EN` → captura habilitada.
+   - `ADDRV` → dirección válida en `MC[i]_ADDR`.
+   - `MISCV` → información extra válida en `MC[i]_MISC`.
+
+### Excepciones
+Los errores MCA pueden generar una **Machine Check Exception (#MC)**, que debe ser manejada por el sistema operativo o firmware.
+
+---
+
+## 3. Ejemplo práctico en UEFI
+
+Los archivos de práctica (`efi.c`, `efi.h`, `msr.s`) muestran cómo:
+- Leer registros MCA desde UEFI.
+- Imprimir valores hexadecimales en pantalla.
+- Recorrer bancos MCA para mostrar `STATUS`, `ADDR` y `MISC`.
+
+Esto constituye un **primer paso práctico** para explorar RAS en entornos controlados (ej. QEMU con OVMF).
+
+---
+
+## 4. Próximos pasos sugeridos
+- **Decodificar bits de `MCi_STATUS`** para mostrar mensajes interpretados.
+- **Inyección de errores en QEMU** para validar el flujo de detección.
+- **Extender Makefile con depuración** (`make debug`).
+- **Explorar registros adicionales** como `IA32_MCG_CTL`.
+- **Instalar manejadores de excepción #MC** en UEFI.
+
+---
+
+## 5. Conclusión
+Este documento sirve como **puerta de entrada**: primero entender qué es RAS y MCA, luego practicar con ejemplos sencillos en UEFI, y finalmente avanzar hacia escenarios más complejos como inyección de errores y depuración.
+
+## Tabla de bits de MCi_STATUS
+
+El registro `IA32_MC[i]_STATUS` contiene información sobre el error detectado en un banco MCA.  
+Cada bit tiene un significado específico:
+
+| Bit   | Nombre   | Significado                                                                 |
+|-------|----------|------------------------------------------------------------------------------|
+| 0     | **VAL**  | Indica que el contenido del registro es válido.                             |
+| 1     | **UC**   | Error irrecuperable (UnCorrected).                                          |
+| 2     | **EN**   | Captura habilitada para este banco.                                         |
+| 3     | **PCC**  | Processor Context Corrupt: el estado del procesador no es confiable.        |
+| 4     | **ADDRV**| Dirección válida disponible en `MCi_ADDR`.                                  |
+| 5     | **MISCV**| Información adicional válida en `MCi_MISC`.                                 |
+| 6     | **CE**   | Error corregible (Corrected Error).                                         |
+| 7     | **OVER** | Indica que ocurrió más de un error antes de que se pudiera registrar.       |
+| 15:8  | **RES**  | Reservado.                                                                  |
+| 31:16 | **Error Code** | Código de error específico del tipo de fallo.                         |
+| 63:32 | **Model Specific** | Información dependiente del modelo de CPU.                        |
+
+---
+
+### Ejemplo de interpretación
+Si `MCi_STATUS = 0x0000000000009405`:
+- `VAL = 1` → Registro válido.  
+- `UC = 0` → Error corregible.  
+- `ADDRV = 1` → Dirección asociada disponible.  
+- `Error Code = 0x94` → Tipo de error específico (ej. fallo en caché L2).  
+
+---
+
+## Recomendación práctica
+En tu programa UEFI, además de imprimir el valor hexadecimal, puedes **decodificar estos bits** y mostrar mensajes como:
+- `"Error corregible en banco 2, dirección válida disponible."`
+- `"Error irrecuperable, contexto del procesador corrupto."`
+
+Esto convierte la salida en un **diagnóstico legible** y ayuda a los alumnos a relacionar teoría con práctica.
+
+## Instrucción CPUID y capacidades MCA
+
+### Descripción
+La instrucción **CPUID** permite consultar información sobre el procesador:  
+- Familia, modelo y stepping.  
+- Extensiones soportadas (SSE, AVX, etc.).  
+- Capacidades de confiabilidad como la **Machine-Check Architecture (MCA)**.  
+
+El flujo típico es:
+1. Ejecutar `CPUID` con `EAX = 1` → devuelve características básicas.  
+2. Revisar el bit **MCA** en `EDX` → indica si el procesador soporta la arquitectura de Machine Check.  
+3. Si está habilitado, se pueden leer los registros MSR correspondientes (`IA32_MCG_CAP`, `IA32_MCG_STATUS`, bancos `MCi_*`).  
+
+---
+
+### Tabla de CPUID relevante para MCA
+
+| Registro | Bit / Campo | Significado                                                                 |
+|----------|-------------|------------------------------------------------------------------------------|
+| `CPUID.01H:EDX` | Bit 7 (MCE) | Indica soporte para **Machine Check Exception (#MC)**.                 |
+| `CPUID.01H:EDX` | Bit 14 (MCA) | Indica soporte para **Machine-Check Architecture**.                   |
+| `CPUID.80000007H:EDX` | Bit 8 (Invariant TSC) | Relacionado con temporización estable, útil en diagnósticos. |
+| `CPUID.80000008H:EBX` | Varios | Información extendida sobre MSRs disponibles en CPUs modernas.        |
+
+---
+
+### Ejemplo práctico
+En C/UEFI puedes hacer:
+
+```c
+uint32_t eax, ebx, ecx, edx;
+__asm__ __volatile__("cpuid"
+                     : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
+                     : "a"(1));
+
+if (edx & (1 << 14)) {
+    // MCA soportado
+}
+if (edx & (1 << 7)) {
+    // Machine Check Exception soportada
+}
+
+

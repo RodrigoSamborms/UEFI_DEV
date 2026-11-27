@@ -1,0 +1,107 @@
+Resumen de la sesión UEFI
+
+1. Archivos trabajados:
+   - RASPract_002:
+     * efi.c: Lectura de registros MCA (MCG_CAP, MCG_STATUS) con bucle extendido para recorrer bancos.
+     * efi.h: Definiciones mínimas de EFI_SYSTEM_TABLE, BootServices y ConOut.
+     * msr.s: Rutina ReadMsr con rdmsr, empaquetando EDX:EAX en RAX.
+   - RASPract_004:
+     * efi.c: Lectura de MCG_CAP y recorrido de bancos MCA mostrando STATUS, ADDR y MISC.
+     * efi.h: Igual estructura base, con soporte para BootServices->Stall.
+     * msr.s: Rutina ReadMsr idéntica, reutilizable.
+
+2. Scripts:
+   - PowerShell (BuildRun-RASPract_002.ps1): Automatiza compilación con GCC y ejecución en QEMU.
+   - Makefile: Compilación en Linux/WSL con objetivos all, clean y run.
+
+3. Flujo de trabajo:
+   - Cada práctica se guarda en su carpeta (RASPract_002, RASPract_004).
+   - Se usan los mismos nombres de archivos fuente.
+   - El script y Makefile sirven sin cambios, solo cambiando de carpeta.
+
+4. Próximos pasos sugeridos:
+   - Extender Makefile con variantes de depuración.
+   - Iterar sobre bancos MCA para pruebas de inyección de errores.
+   - Explorar registros adicionales de MCA según Intel SDM Vol. 3A.
+
+Fin del resumen.
+
+## Tabla de bits de MCi_STATUS
+
+El registro `IA32_MC[i]_STATUS` contiene información sobre el error detectado en un banco MCA.  
+Cada bit tiene un significado específico:
+
+| Bit   | Nombre   | Significado                                                                 |
+|-------|----------|------------------------------------------------------------------------------|
+| 0     | **VAL**  | Indica que el contenido del registro es válido.                             |
+| 1     | **UC**   | Error irrecuperable (UnCorrected).                                          |
+| 2     | **EN**   | Captura habilitada para este banco.                                         |
+| 3     | **PCC**  | Processor Context Corrupt: el estado del procesador no es confiable.        |
+| 4     | **ADDRV**| Dirección válida disponible en `MCi_ADDR`.                                  |
+| 5     | **MISCV**| Información adicional válida en `MCi_MISC`.                                 |
+| 6     | **CE**   | Error corregible (Corrected Error).                                         |
+| 7     | **OVER** | Indica que ocurrió más de un error antes de que se pudiera registrar.       |
+| 15:8  | **RES**  | Reservado.                                                                  |
+| 31:16 | **Error Code** | Código de error específico del tipo de fallo.                         |
+| 63:32 | **Model Specific** | Información dependiente del modelo de CPU.                        |
+
+---
+
+### Ejemplo de interpretación
+Si `MCi_STATUS = 0x0000000000009405`:
+- `VAL = 1` → Registro válido.  
+- `UC = 0` → Error corregible.  
+- `ADDRV = 1` → Dirección asociada disponible.  
+- `Error Code = 0x94` → Tipo de error específico (ej. fallo en caché L2).  
+
+---
+
+## Recomendación práctica
+En tu programa UEFI, además de imprimir el valor hexadecimal, puedes **decodificar estos bits** y mostrar mensajes como:
+- `"Error corregible en banco 2, dirección válida disponible."`
+- `"Error irrecuperable, contexto del procesador corrupto."`
+
+Esto convierte la salida en un **diagnóstico legible** y ayuda a los alumnos a relacionar teoría con práctica.
+
+## Instrucción CPUID y capacidades MCA
+
+### Descripción
+La instrucción **CPUID** permite consultar información sobre el procesador:  
+- Familia, modelo y stepping.  
+- Extensiones soportadas (SSE, AVX, etc.).  
+- Capacidades de confiabilidad como la **Machine-Check Architecture (MCA)**.  
+
+El flujo típico es:
+1. Ejecutar `CPUID` con `EAX = 1` → devuelve características básicas.  
+2. Revisar el bit **MCA** en `EDX` → indica si el procesador soporta la arquitectura de Machine Check.  
+3. Si está habilitado, se pueden leer los registros MSR correspondientes (`IA32_MCG_CAP`, `IA32_MCG_STATUS`, bancos `MCi_*`).  
+
+---
+
+### Tabla de CPUID relevante para MCA
+
+| Registro | Bit / Campo | Significado                                                                 |
+|----------|-------------|------------------------------------------------------------------------------|
+| `CPUID.01H:EDX` | Bit 7 (MCE) | Indica soporte para **Machine Check Exception (#MC)**.                 |
+| `CPUID.01H:EDX` | Bit 14 (MCA) | Indica soporte para **Machine-Check Architecture**.                   |
+| `CPUID.80000007H:EDX` | Bit 8 (Invariant TSC) | Relacionado con temporización estable, útil en diagnósticos. |
+| `CPUID.80000008H:EBX` | Varios | Información extendida sobre MSRs disponibles en CPUs modernas.        |
+
+---
+
+### Ejemplo práctico
+En C/UEFI puedes hacer:
+
+```c
+uint32_t eax, ebx, ecx, edx;
+__asm__ __volatile__("cpuid"
+                     : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
+                     : "a"(1));
+
+if (edx & (1 << 14)) {
+    // MCA soportado
+}
+if (edx & (1 << 7)) {
+    // Machine Check Exception soportada
+}
+
